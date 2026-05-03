@@ -98,6 +98,32 @@ class UserPackageHydrationTests(unittest.TestCase):
             )
 
 
+class UserPackageCatalogParityTests(unittest.TestCase):
+    def test_catalog_contains_expected_user_facing_tools_from_bootstraps(self) -> None:
+        actual = {entry["p"] for entry in MODULE.USER_PACKAGES}
+        expected = {
+            "atuin",
+            "bat",
+            "btop",
+            "curl",
+            "dust",
+            "eza",
+            "fastfetch",
+            "fzf",
+            "git",
+            "jq",
+            "lazydocker",
+            "nushell",
+            "ripgrep",
+            "starship",
+            "trippy",
+            "wget",
+            "yq",
+            "zellij",
+        }
+        self.assertTrue(expected.issubset(actual))
+
+
 class ConfigHelperTests(unittest.TestCase):
     def test_set_sshd_directive_replaces_commented_value(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

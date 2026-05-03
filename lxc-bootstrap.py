@@ -49,6 +49,7 @@ USER_PACKAGES = [
     {"p": "atuin", "src": "mise:aqua:atuinsh/atuin"},
     {"p": "bat", "src": "mise:aqua:sharkdp/bat"},
     {"p": "btop", "src": "mise:aqua:aristocratos/btop"},
+    {"p": "curl"},
     {"p": "dust", "src": "mise:aqua:bootandy/dust"},
     {"p": "eza", "src": "mise:aqua:eza-community/eza"},
     {"p": "fastfetch", "src": "mise:aqua:fastfetch-cli/fastfetch"},
@@ -60,6 +61,7 @@ USER_PACKAGES = [
     {"p": "ripgrep", "src": "mise:aqua:BurntSushi/ripgrep"},
     {"p": "starship", "src": "mise:aqua:starship/starship"},
     {"p": "trippy", "src": "mise:aqua:fujiapple852/trippy"},
+    {"p": "wget"},
     {"p": "yq", "src": "mise:aqua:mikefarah/yq"},
     {"p": "zellij", "src": "mise:aqua:zellij-org/zellij"},
 ]
@@ -663,7 +665,6 @@ def base_package_specs(ctx: Context) -> list[PackageSpec]:
         specs = [
             spec("bash"),
             spec("ca-certificates"),
-            spec("curl"),
             spec("dbus"),
             spec("fuse-overlayfs"),
             spec("ip6tables", required=False),
@@ -671,14 +672,12 @@ def base_package_specs(ctx: Context) -> list[PackageSpec]:
             spec("openssh"),
             spec("slirp4netns", required=False),
             spec("tar"),
-            spec("wget"),
             spec("xz"),
         ]
     else:
         specs = [
             spec("bash"),
             spec("ca-certificates"),
-            spec("curl"),
             spec("dbus"),
             spec("fuse-overlayfs"),
             spec("iptables"),
@@ -686,7 +685,6 @@ def base_package_specs(ctx: Context) -> list[PackageSpec]:
             spec("slirp4netns", required=False),
             spec("tar"),
             spec("uidmap", required=False),
-            spec("wget"),
             spec("xz-utils"),
         ]
 

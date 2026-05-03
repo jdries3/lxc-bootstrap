@@ -80,8 +80,8 @@ The bootstrap installs these through the distro package manager when possible.
 - `runc` or `crun`
 - SSH server packages
 - `qemu-guest-agent` when the guest is a VM
-- foundational packages such as `curl`, `wget`, `ca-certificates`, and shell
-  support
+- foundational packages such as `ca-certificates`, shell support, and engine-
+  adjacent dependencies
 
 ### Mise-managed components
 
@@ -91,16 +91,19 @@ share the same user-space toolchain.
 - `atuin`
 - `bat`
 - `btop`
+- `curl`
 - `dust`
 - `eza`
 - `fastfetch`
 - `fzf`
+- `git`
 - `jq`
 - `lazydocker`
 - `nushell`
 - `ripgrep`
 - `starship`
 - `trippy`
+- `wget`
 - `yq`
 - `zellij`
 

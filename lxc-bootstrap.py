@@ -45,22 +45,23 @@ LOCAL_BIN_DIR = Path("/root/.local/bin")
 YOUKI_INSTALL_PATH = Path("/usr/local/bin/youki")
 YOUKI_RELEASE_URL = "https://api.github.com/repos/youki-dev/youki/releases/latest"
 
-AQUA_TOOLS = [
-    "aqua:atuinsh/atuin",
-    "aqua:sharkdp/bat",
-    "aqua:aristocratos/btop",
-    "aqua:bootandy/dust",
-    "aqua:eza-community/eza",
-    "aqua:fastfetch-cli/fastfetch",
-    "aqua:junegunn/fzf",
-    "aqua:jqlang/jq",
-    "aqua:jesseduffield/lazydocker",
-    "aqua:nushell/nushell",
-    "aqua:BurntSushi/ripgrep",
-    "aqua:starship/starship",
-    "aqua:fujiapple852/trippy",
-    "aqua:mikefarah/yq",
-    "aqua:zellij-org/zellij",
+USER_PACKAGES = [
+    {"p": "atuin", "src": "mise:aqua:atuinsh/atuin"},
+    {"p": "bat", "src": "mise:aqua:sharkdp/bat"},
+    {"p": "btop", "src": "mise:aqua:aristocratos/btop"},
+    {"p": "dust", "src": "mise:aqua:bootandy/dust"},
+    {"p": "eza", "src": "mise:aqua:eza-community/eza"},
+    {"p": "fastfetch", "src": "mise:aqua:fastfetch-cli/fastfetch"},
+    {"p": "fzf", "src": "mise:aqua:junegunn/fzf"},
+    {"p": "git", "req": False},
+    {"p": "jq", "src": "mise:aqua:jqlang/jq"},
+    {"p": "lazydocker", "src": "mise:aqua:jesseduffield/lazydocker"},
+    {"p": "nushell", "src": "mise:aqua:nushell/nushell"},
+    {"p": "ripgrep", "src": "mise:aqua:BurntSushi/ripgrep"},
+    {"p": "starship", "src": "mise:aqua:starship/starship"},
+    {"p": "trippy", "src": "mise:aqua:fujiapple852/trippy"},
+    {"p": "yq", "src": "mise:aqua:mikefarah/yq"},
+    {"p": "zellij", "src": "mise:aqua:zellij-org/zellij"},
 ]
 
 
@@ -100,6 +101,16 @@ class Context:
     runtime: str
     state: dict[str, Any]
     github_user: str
+
+
+@dataclass(frozen=True)
+class UserPackage:
+    program: str
+    required: bool = True
+    install_mode: str = "repo"
+    alpine_package: str | None = None
+    debian_package: str | None = None
+    mise_tool: str | None = None
 
 
 class PackageManager:
@@ -547,6 +558,106 @@ def spec(*candidates: str, required: bool = True) -> PackageSpec:
     return PackageSpec(candidates=tuple(candidates), required=required)
 
 
+def hydrate_user_package(definition: dict[str, Any]) -> UserPackage:
+    program = definition.get("p")
+    if not isinstance(program, str) or not program.strip():
+        raise BootstrapError("Each user package entry must include a non-empty 'p' value")
+    program = program.strip()
+
+    required = definition.get("req", True)
+    if not isinstance(required, bool):
+        raise BootstrapError(f"User package '{program}' has a non-boolean 'req' value")
+
+    src = definition.get("src")
+    if src is None:
+        return UserPackage(
+            program=program,
+            required=required,
+            install_mode="repo",
+            alpine_package=program,
+            debian_package=program,
+        )
+    if not isinstance(src, str) or not src.strip():
+        raise BootstrapError(f"User package '{program}' has an invalid 'src' value")
+
+    tokens = [token.strip() for token in src.split(",") if token.strip()]
+    if not tokens:
+        raise BootstrapError(f"User package '{program}' has an empty 'src' value")
+
+    mise_tokens = [token for token in tokens if token.startswith("mise:")]
+    if mise_tokens:
+        if len(tokens) != 1 or len(mise_tokens) != 1:
+            raise BootstrapError(
+                f"User package '{program}' cannot mix mise sources with distro sources"
+            )
+        mise_tool = mise_tokens[0].split(":", 1)[1].strip()
+        if not mise_tool:
+            raise BootstrapError(f"User package '{program}' has an empty mise source")
+        return UserPackage(
+            program=program,
+            required=required,
+            install_mode="mise",
+            mise_tool=mise_tool,
+        )
+
+    alpine_package = program
+    debian_package = program
+    seen_kinds: set[str] = set()
+    for token in tokens:
+        if ":" not in token:
+            raise BootstrapError(
+                f"User package '{program}' has an invalid source token '{token}'"
+            )
+        kind, value = token.split(":", 1)
+        kind = kind.strip()
+        value = value.strip()
+        if kind not in {"apk", "deb"}:
+            raise BootstrapError(
+                f"User package '{program}' has an unsupported source kind '{kind}'"
+            )
+        if kind in seen_kinds:
+            raise BootstrapError(
+                f"User package '{program}' defines '{kind}' more than once"
+            )
+        seen_kinds.add(kind)
+        if kind == "apk":
+            alpine_package = value or None
+        else:
+            debian_package = value or None
+
+    return UserPackage(
+        program=program,
+        required=required,
+        install_mode="repo",
+        alpine_package=alpine_package,
+        debian_package=debian_package,
+    )
+
+
+def hydrated_user_packages() -> list[UserPackage]:
+    return [hydrate_user_package(definition) for definition in USER_PACKAGES]
+
+
+def repo_package_for_os(package: UserPackage, os_type: str) -> str | None:
+    return package.alpine_package if os_type == "alpine" else package.debian_package
+
+
+def repo_user_package_specs(ctx: Context, packages: Sequence[UserPackage]) -> list[PackageSpec]:
+    specs: list[PackageSpec] = []
+    for package in packages:
+        if package.install_mode != "repo":
+            continue
+        repo_package = repo_package_for_os(package, ctx.os_type)
+        if repo_package is None:
+            continue
+        specs.append(spec(repo_package, required=package.required))
+    return specs
+
+
+def mise_user_packages(packages: Sequence[UserPackage]) -> list[UserPackage]:
+    return [package for package in packages if package.install_mode == "mise"]
+
+
 def base_package_specs(ctx: Context) -> list[PackageSpec]:
     if ctx.os_type == "alpine":
         specs = [
@@ -555,7 +666,6 @@ def base_package_specs(ctx: Context) -> list[PackageSpec]:
             spec("curl"),
             spec("dbus"),
             spec("fuse-overlayfs"),
-            spec("git", required=False),
             spec("ip6tables", required=False),
             spec("iptables"),
             spec("openssh"),
@@ -571,7 +681,6 @@ def base_package_specs(ctx: Context) -> list[PackageSpec]:
             spec("curl"),
             spec("dbus"),
             spec("fuse-overlayfs"),
-            spec("git", required=False),
             spec("iptables"),
             spec("openssh-server"),
             spec("slirp4netns", required=False),
@@ -695,6 +804,20 @@ def install_mise(ctx: Context, package_manager: PackageManager) -> None:
     success(ctx.console, "Installed mise")
 
 
+def install_repo_user_packages(
+    ctx: Context, package_manager: PackageManager, packages: Sequence[UserPackage]
+) -> None:
+    specs = repo_user_package_specs(ctx, packages)
+    if not specs:
+        info(ctx.console, "No repo-backed user packages selected for installation")
+        return
+
+    info(ctx.console, "Installing repo-backed user packages")
+    resolved_packages = resolve_packages(ctx.console, package_manager, specs)
+    package_manager.install(resolved_packages)
+    success(ctx.console, "Repo-backed user package installation complete")
+
+
 def mise_binary() -> str:
     resolved = shutil.which("mise")
     if resolved:
@@ -705,21 +828,38 @@ def mise_binary() -> str:
     raise BootstrapError("mise is not installed")
 
 
-def build_mise_config() -> str:
+def build_mise_config(packages: Sequence[UserPackage] | None = None) -> str:
+    source_packages = hydrated_user_packages() if packages is None else list(packages)
+    selected_packages = mise_user_packages(source_packages)
     lines = ["[tools]"]
-    lines.extend(f'"{tool}" = "latest"' for tool in AQUA_TOOLS)
+    lines.extend(f'"{package.mise_tool}" = "latest"' for package in selected_packages if package.mise_tool)
     return "\n".join(lines) + "\n"
 
 
-def configure_mise(ctx: Context) -> None:
-    info(ctx.console, "Configuring mise and common CLI tools")
+def configure_mise(
+    ctx: Context, package_manager: PackageManager, packages: Sequence[UserPackage]
+) -> None:
+    selected_packages = mise_user_packages(packages)
+    if not selected_packages:
+        info(ctx.console, "No mise-backed user packages selected for installation")
+        return
+
+    info(ctx.console, "Configuring mise-backed user packages")
+    install_mise(ctx, package_manager)
     MISE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    MISE_CONFIG_PATH.write_text(build_mise_config())
+    MISE_CONFIG_PATH.write_text(build_mise_config(selected_packages))
     MISE_CONFIG_PATH.chmod(0o644)
     env = os.environ.copy()
     env["PATH"] = f"{LOCAL_BIN_DIR}:{env.get('PATH', '')}"
     run_command(ctx.console, [mise_binary(), "install"], env=env)
-    success(ctx.console, "mise tooling installation complete")
+    success(ctx.console, "mise-backed user package installation complete")
+
+
+def install_user_packages(ctx: Context, package_manager: PackageManager) -> list[UserPackage]:
+    packages = hydrated_user_packages()
+    install_repo_user_packages(ctx, package_manager, packages)
+    configure_mise(ctx, package_manager, packages)
+    return packages
 
 
 def parse_youki_version(output: str) -> str | None:
@@ -1385,8 +1525,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         configure_guest_agent(ctx, services)
         install_engine_packages(ctx, package_manager)
         install_runtime(ctx, package_manager)
-        install_mise(ctx, package_manager)
-        configure_mise(ctx)
+        install_user_packages(ctx, package_manager)
 
         if ctx.engine == "docker":
             configure_docker(ctx, services)

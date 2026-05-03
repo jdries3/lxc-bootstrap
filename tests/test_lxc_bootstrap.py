@@ -63,6 +63,41 @@ class DockerPayloadTests(unittest.TestCase):
         self.assertEqual(payload["storage-driver"], "overlay2")
 
 
+class UserPackageHydrationTests(unittest.TestCase):
+    def test_missing_src_defaults_to_matching_apk_and_deb_package_names(self) -> None:
+        package = MODULE.hydrate_user_package({"p": "git", "req": False})
+        self.assertEqual(package.program, "git")
+        self.assertFalse(package.required)
+        self.assertEqual(package.install_mode, "repo")
+        self.assertEqual(package.alpine_package, "git")
+        self.assertEqual(package.debian_package, "git")
+
+    def test_partial_debian_override_inherits_default_alpine_name(self) -> None:
+        package = MODULE.hydrate_user_package({"p": "xz", "src": "deb:xz-utils"})
+        self.assertEqual(package.alpine_package, "xz")
+        self.assertEqual(package.debian_package, "xz-utils")
+
+    def test_empty_debian_source_disables_that_distribution_only(self) -> None:
+        package = MODULE.hydrate_user_package({"p": "ip6tables", "src": "deb:"})
+        self.assertEqual(package.alpine_package, "ip6tables")
+        self.assertIsNone(package.debian_package)
+
+    def test_mise_source_is_exclusive(self) -> None:
+        package = MODULE.hydrate_user_package(
+            {"p": "bat", "src": "mise:aqua:sharkdp/bat"}
+        )
+        self.assertEqual(package.install_mode, "mise")
+        self.assertEqual(package.mise_tool, "aqua:sharkdp/bat")
+        self.assertIsNone(package.alpine_package)
+        self.assertIsNone(package.debian_package)
+
+    def test_mixing_mise_and_repo_sources_is_rejected(self) -> None:
+        with self.assertRaises(MODULE.BootstrapError):
+            MODULE.hydrate_user_package(
+                {"p": "bat", "src": "mise:aqua:sharkdp/bat,deb:bat"}
+            )
+
+
 class ConfigHelperTests(unittest.TestCase):
     def test_set_sshd_directive_replaces_commented_value(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -82,6 +117,7 @@ class ConfigHelperTests(unittest.TestCase):
         self.assertIn('"aqua:atuinsh/atuin" = "latest"', config)
         self.assertIn('"aqua:starship/starship" = "latest"', config)
         self.assertIn('"aqua:zellij-org/zellij" = "latest"', config)
+        self.assertNotIn('"git" = "latest"', config)
 
     def test_storage_backend_labels_match_expected_modes(self) -> None:
         self.assertEqual(MODULE.storage_backend_label_for_mode("docker", "privileged"), "overlay2")

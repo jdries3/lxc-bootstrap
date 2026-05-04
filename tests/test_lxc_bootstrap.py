@@ -68,9 +68,10 @@ class UserPackageHydrationTests(unittest.TestCase):
         package = MODULE.hydrate_user_package({"p": "git", "req": False})
         self.assertEqual(package.program, "git")
         self.assertFalse(package.required)
-        self.assertEqual(package.install_mode, "repo")
         self.assertEqual(package.alpine_package, "git")
         self.assertEqual(package.debian_package, "git")
+        self.assertIsNone(package.alpine_mise_tool)
+        self.assertIsNone(package.debian_mise_tool)
 
     def test_partial_debian_override_inherits_default_alpine_name(self) -> None:
         package = MODULE.hydrate_user_package({"p": "xz", "src": "deb:xz-utils"})
@@ -86,12 +87,21 @@ class UserPackageHydrationTests(unittest.TestCase):
         package = MODULE.hydrate_user_package(
             {"p": "bat", "src": "mise:aqua:sharkdp/bat"}
         )
-        self.assertEqual(package.install_mode, "mise")
-        self.assertEqual(package.mise_tool, "aqua:sharkdp/bat")
+        self.assertEqual(package.alpine_mise_tool, "aqua:sharkdp/bat")
+        self.assertEqual(package.debian_mise_tool, "aqua:sharkdp/bat")
         self.assertIsNone(package.alpine_package)
         self.assertIsNone(package.debian_package)
 
-    def test_mixing_mise_and_repo_sources_is_rejected(self) -> None:
+    def test_distro_specific_mise_source_is_supported(self) -> None:
+        package = MODULE.hydrate_user_package(
+            {"p": "bat", "src": "deb:mise:aqua:sharkdp/bat"}
+        )
+        self.assertEqual(package.alpine_package, "bat")
+        self.assertEqual(package.debian_package, None)
+        self.assertIsNone(package.alpine_mise_tool)
+        self.assertEqual(package.debian_mise_tool, "aqua:sharkdp/bat")
+
+    def test_mixing_global_mise_and_repo_sources_is_rejected(self) -> None:
         with self.assertRaises(MODULE.BootstrapError):
             MODULE.hydrate_user_package(
                 {"p": "bat", "src": "mise:aqua:sharkdp/bat,deb:bat"}
@@ -138,12 +148,16 @@ class ConfigHelperTests(unittest.TestCase):
             self.assertIn("PasswordAuthentication no\n", contents)
             self.assertNotIn("#PermitRootLogin yes", contents)
 
-    def test_build_mise_config_contains_expected_tools(self) -> None:
-        config = MODULE.build_mise_config()
+    def test_build_mise_config_contains_expected_tools_for_debian(self) -> None:
+        config = MODULE.build_mise_config("debian")
         self.assertIn('"aqua:atuinsh/atuin" = "latest"', config)
         self.assertIn('"aqua:starship/starship" = "latest"', config)
         self.assertIn('"aqua:zellij-org/zellij" = "latest"', config)
         self.assertNotIn('"git" = "latest"', config)
+
+    def test_build_mise_config_is_empty_on_alpine_for_repo_backed_tools(self) -> None:
+        config = MODULE.build_mise_config("alpine")
+        self.assertEqual(config.strip(), "[tools]")
 
     def test_storage_backend_labels_match_expected_modes(self) -> None:
         self.assertEqual(MODULE.storage_backend_label_for_mode("docker", "privileged"), "overlay2")

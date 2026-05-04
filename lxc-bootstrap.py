@@ -42,29 +42,50 @@ MISE_CONFIG_PATH = MISE_CONFIG_DIR / "config.toml"
 MISE_HOME = Path("/root/.local/share/mise")
 MISE_SHIMS_DIR = MISE_HOME / "shims"
 LOCAL_BIN_DIR = Path("/root/.local/bin")
+BASH_COMPLETION_DIR = Path("/root/.local/share/bash-completion/completions")
+FISH_COMPLETION_DIR = Path("/root/.config/fish/completions")
 YOUKI_INSTALL_PATH = Path("/usr/local/bin/youki")
 YOUKI_RELEASE_URL = "https://api.github.com/repos/youki-dev/youki/releases/latest"
 
 USER_PACKAGES = [
-    {"p": "atuin", "src": "mise:aqua:atuinsh/atuin"},
-    {"p": "bat", "src": "mise:aqua:sharkdp/bat"},
-    {"p": "btop", "src": "mise:aqua:aristocratos/btop"},
+    {"p": "atuin", "src": "deb:mise:aqua:atuinsh/atuin"},
+    {"p": "bat", "src": "deb:mise:aqua:sharkdp/bat"},
+    {"p": "btop", "src": "deb:mise:aqua:aristocratos/btop"},
     {"p": "curl"},
-    {"p": "dust", "src": "mise:aqua:bootandy/dust"},
-    {"p": "eza", "src": "mise:aqua:eza-community/eza"},
-    {"p": "fastfetch", "src": "mise:aqua:fastfetch-cli/fastfetch"},
-    {"p": "fzf", "src": "mise:aqua:junegunn/fzf"},
+    {"p": "dust", "src": "deb:mise:aqua:bootandy/dust"},
+    {"p": "eza", "src": "deb:mise:aqua:eza-community/eza"},
+    {"p": "fastfetch", "src": "deb:mise:aqua:fastfetch-cli/fastfetch"},
+    {"p": "fzf", "src": "deb:mise:aqua:junegunn/fzf"},
     {"p": "git", "req": False},
-    {"p": "jq", "src": "mise:aqua:jqlang/jq"},
-    {"p": "lazydocker", "src": "mise:aqua:jesseduffield/lazydocker"},
-    {"p": "nushell", "src": "mise:aqua:nushell/nushell"},
-    {"p": "ripgrep", "src": "mise:aqua:BurntSushi/ripgrep"},
-    {"p": "starship", "src": "mise:aqua:starship/starship"},
-    {"p": "trippy", "src": "mise:aqua:fujiapple852/trippy"},
+    {"p": "jq", "src": "deb:mise:aqua:jqlang/jq"},
+    {"p": "lazydocker", "src": "deb:mise:aqua:jesseduffield/lazydocker"},
+    {"p": "nushell", "src": "deb:mise:aqua:nushell/nushell"},
+    {"p": "ripgrep", "src": "deb:mise:aqua:BurntSushi/ripgrep"},
+    {"p": "starship", "src": "deb:mise:aqua:starship/starship"},
+    {"p": "trippy", "src": "deb:mise:aqua:fujiapple852/trippy"},
     {"p": "wget"},
-    {"p": "yq", "src": "mise:aqua:mikefarah/yq"},
-    {"p": "zellij", "src": "mise:aqua:zellij-org/zellij"},
+    {"p": "yq", "src": "apk:yq-go,deb:mise:aqua:mikefarah/yq"},
+    {"p": "zellij", "src": "deb:mise:aqua:zellij-org/zellij"},
 ]
+
+COMPLETION_GENERATORS: dict[str, dict[str, list[str]]] = {
+    "mise": {
+        "bash": ["mise", "completion", "bash", "--include-bash-completion-lib"],
+        "fish": ["mise", "completion", "fish"],
+    },
+    "atuin": {
+        "bash": ["atuin", "gen-completions", "--shell", "bash"],
+        "fish": ["atuin", "gen-completions", "--shell", "fish"],
+    },
+    "starship": {
+        "bash": ["starship", "completions", "bash"],
+        "fish": ["starship", "completions", "fish"],
+    },
+    "yq": {
+        "bash": ["yq", "completion", "bash"],
+        "fish": ["yq", "completion", "fish"],
+    },
+}
 
 
 class BootstrapError(RuntimeError):
@@ -109,10 +130,10 @@ class Context:
 class UserPackage:
     program: str
     required: bool = True
-    install_mode: str = "repo"
     alpine_package: str | None = None
     debian_package: str | None = None
-    mise_tool: str | None = None
+    alpine_mise_tool: str | None = None
+    debian_mise_tool: str | None = None
 
 
 class PackageManager:
@@ -575,7 +596,6 @@ def hydrate_user_package(definition: dict[str, Any]) -> UserPackage:
         return UserPackage(
             program=program,
             required=required,
-            install_mode="repo",
             alpine_package=program,
             debian_package=program,
         )
@@ -586,33 +606,38 @@ def hydrate_user_package(definition: dict[str, Any]) -> UserPackage:
     if not tokens:
         raise BootstrapError(f"User package '{program}' has an empty 'src' value")
 
-    mise_tokens = [token for token in tokens if token.startswith("mise:")]
-    if mise_tokens:
-        if len(tokens) != 1 or len(mise_tokens) != 1:
-            raise BootstrapError(
-                f"User package '{program}' cannot mix mise sources with distro sources"
-            )
-        mise_tool = mise_tokens[0].split(":", 1)[1].strip()
-        if not mise_tool:
-            raise BootstrapError(f"User package '{program}' has an empty mise source")
-        return UserPackage(
-            program=program,
-            required=required,
-            install_mode="mise",
-            mise_tool=mise_tool,
-        )
-
     alpine_package = program
     debian_package = program
+    alpine_mise_tool: str | None = None
+    debian_mise_tool: str | None = None
     seen_kinds: set[str] = set()
+
     for token in tokens:
         if ":" not in token:
             raise BootstrapError(
                 f"User package '{program}' has an invalid source token '{token}'"
             )
+
         kind, value = token.split(":", 1)
         kind = kind.strip()
         value = value.strip()
+
+        if kind == "mise":
+            if len(tokens) != 1:
+                raise BootstrapError(
+                    f"User package '{program}' cannot mix global mise sources with distro sources"
+                )
+            if not value:
+                raise BootstrapError(f"User package '{program}' has an empty mise source")
+            return UserPackage(
+                program=program,
+                required=required,
+                alpine_package=None,
+                debian_package=None,
+                alpine_mise_tool=value,
+                debian_mise_tool=value,
+            )
+
         if kind not in {"apk", "deb"}:
             raise BootstrapError(
                 f"User package '{program}' has an unsupported source kind '{kind}'"
@@ -622,17 +647,31 @@ def hydrate_user_package(definition: dict[str, Any]) -> UserPackage:
                 f"User package '{program}' defines '{kind}' more than once"
             )
         seen_kinds.add(kind)
+
+        repo_value = value or None
+        mise_value: str | None = None
+        if value.startswith("mise:"):
+            mise_value = value.split(":", 1)[1].strip()
+            if not mise_value:
+                raise BootstrapError(
+                    f"User package '{program}' has an empty distro-specific mise source"
+                )
+            repo_value = None
+
         if kind == "apk":
-            alpine_package = value or None
+            alpine_package = repo_value
+            alpine_mise_tool = mise_value
         else:
-            debian_package = value or None
+            debian_package = repo_value
+            debian_mise_tool = mise_value
 
     return UserPackage(
         program=program,
         required=required,
-        install_mode="repo",
         alpine_package=alpine_package,
         debian_package=debian_package,
+        alpine_mise_tool=alpine_mise_tool,
+        debian_mise_tool=debian_mise_tool,
     )
 
 
@@ -644,10 +683,14 @@ def repo_package_for_os(package: UserPackage, os_type: str) -> str | None:
     return package.alpine_package if os_type == "alpine" else package.debian_package
 
 
+def mise_tool_for_os(package: UserPackage, os_type: str) -> str | None:
+    return package.alpine_mise_tool if os_type == "alpine" else package.debian_mise_tool
+
+
 def repo_user_package_specs(ctx: Context, packages: Sequence[UserPackage]) -> list[PackageSpec]:
     specs: list[PackageSpec] = []
     for package in packages:
-        if package.install_mode != "repo":
+        if mise_tool_for_os(package, ctx.os_type):
             continue
         repo_package = repo_package_for_os(package, ctx.os_type)
         if repo_package is None:
@@ -656,8 +699,8 @@ def repo_user_package_specs(ctx: Context, packages: Sequence[UserPackage]) -> li
     return specs
 
 
-def mise_user_packages(packages: Sequence[UserPackage]) -> list[UserPackage]:
-    return [package for package in packages if package.install_mode == "mise"]
+def mise_user_packages(os_type: str, packages: Sequence[UserPackage]) -> list[UserPackage]:
+    return [package for package in packages if mise_tool_for_os(package, os_type)]
 
 
 def base_package_specs(ctx: Context) -> list[PackageSpec]:
@@ -826,18 +869,22 @@ def mise_binary() -> str:
     raise BootstrapError("mise is not installed")
 
 
-def build_mise_config(packages: Sequence[UserPackage] | None = None) -> str:
+def build_mise_config(os_type: str, packages: Sequence[UserPackage] | None = None) -> str:
     source_packages = hydrated_user_packages() if packages is None else list(packages)
-    selected_packages = mise_user_packages(source_packages)
+    selected_packages = mise_user_packages(os_type, source_packages)
     lines = ["[tools]"]
-    lines.extend(f'"{package.mise_tool}" = "latest"' for package in selected_packages if package.mise_tool)
+    lines.extend(
+        f'"{mise_tool_for_os(package, os_type)}" = "latest"'
+        for package in selected_packages
+        if mise_tool_for_os(package, os_type)
+    )
     return "\n".join(lines) + "\n"
 
 
 def configure_mise(
     ctx: Context, package_manager: PackageManager, packages: Sequence[UserPackage]
 ) -> None:
-    selected_packages = mise_user_packages(packages)
+    selected_packages = mise_user_packages(ctx.os_type, packages)
     if not selected_packages:
         info(ctx.console, "No mise-backed user packages selected for installation")
         return
@@ -845,7 +892,7 @@ def configure_mise(
     info(ctx.console, "Configuring mise-backed user packages")
     install_mise(ctx, package_manager)
     MISE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    MISE_CONFIG_PATH.write_text(build_mise_config(selected_packages))
+    MISE_CONFIG_PATH.write_text(build_mise_config(ctx.os_type, selected_packages))
     MISE_CONFIG_PATH.chmod(0o644)
     env = os.environ.copy()
     env["PATH"] = f"{LOCAL_BIN_DIR}:{env.get('PATH', '')}"
@@ -858,6 +905,106 @@ def install_user_packages(ctx: Context, package_manager: PackageManager) -> list
     install_repo_user_packages(ctx, package_manager, packages)
     configure_mise(ctx, package_manager, packages)
     return packages
+
+
+def completion_command_for(tool: str, shell: str) -> list[str] | None:
+    return COMPLETION_GENERATORS.get(tool, {}).get(shell)
+
+
+def write_completion_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    path.chmod(0o644)
+
+
+def generate_completion_script(command: Sequence[str]) -> str | None:
+    env = os.environ.copy()
+    env["PATH"] = f"{LOCAL_BIN_DIR}:{MISE_SHIMS_DIR}:{env.get('PATH', '')}"
+    result = subprocess.run(command, capture_output=True, text=True, check=False, env=env)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout
+
+
+def install_generated_completions(ctx: Context, packages: Sequence[UserPackage]) -> None:
+    if ctx.options.install_bash:
+        BASH_COMPLETION_DIR.mkdir(parents=True, exist_ok=True)
+    if ctx.options.install_fish:
+        FISH_COMPLETION_DIR.mkdir(parents=True, exist_ok=True)
+
+    completion_tools = set()
+    for package in packages:
+        if repo_package_for_os(package, ctx.os_type) or mise_tool_for_os(package, ctx.os_type):
+            completion_tools.add(package.program)
+    if shutil.which("mise"):
+        completion_tools.add("mise")
+
+    for tool in sorted(completion_tools):
+        if ctx.options.install_bash:
+            bash_command = completion_command_for(tool, "bash")
+            if bash_command:
+                content = generate_completion_script(bash_command)
+                if content:
+                    write_completion_file(BASH_COMPLETION_DIR / tool, content)
+                else:
+                    warn(ctx.console, f"Could not generate bash completions for {tool}")
+
+        if ctx.options.install_fish:
+            fish_command = completion_command_for(tool, "fish")
+            if fish_command:
+                content = generate_completion_script(fish_command)
+                if content:
+                    write_completion_file(FISH_COMPLETION_DIR / f"{tool}.fish", content)
+                else:
+                    warn(ctx.console, f"Could not generate fish completions for {tool}")
+
+
+def discover_alpine_completion_packages(
+    package_manager: PackageManager, repo_packages: Sequence[str], shell: str
+) -> list[str]:
+    discovered: list[str] = []
+    for package in repo_packages:
+        candidate = f"{package}-{shell}-completion"
+        if package_manager.package_exists(candidate):
+            discovered.append(candidate)
+    return sorted(set(discovered))
+
+
+def install_repo_completion_packages(
+    ctx: Context, package_manager: PackageManager, packages: Sequence[UserPackage]
+) -> None:
+    if ctx.os_type != "alpine":
+        return
+
+    repo_packages = [
+        repo_package
+        for package in packages
+        if not mise_tool_for_os(package, ctx.os_type)
+        for repo_package in [repo_package_for_os(package, ctx.os_type)]
+        if repo_package
+    ]
+
+    completion_packages: list[str] = []
+    if ctx.options.install_bash:
+        completion_packages.extend(
+            discover_alpine_completion_packages(package_manager, repo_packages, "bash")
+        )
+    if ctx.options.install_fish:
+        completion_packages.extend(
+            discover_alpine_completion_packages(package_manager, repo_packages, "fish")
+        )
+
+    if completion_packages:
+        package_manager.install(sorted(set(completion_packages)))
+
+
+def configure_completions(
+    ctx: Context, package_manager: PackageManager, packages: Sequence[UserPackage]
+) -> None:
+    info(ctx.console, "Configuring shell completions")
+    install_repo_completion_packages(ctx, package_manager, packages)
+    install_generated_completions(ctx, packages)
+    success(ctx.console, "Shell completions configured")
 
 
 def parse_youki_version(output: str) -> str | None:
@@ -1326,6 +1473,10 @@ def configure_shells(ctx: Context) -> None:
     bashrc.touch(exist_ok=True)
     ensure_line(bashrc, ". /etc/profile.d/lxc-bootstrap-paths.sh")
     ensure_line(bashrc, ". /etc/profile.d/lxc-bootstrap-aliases.sh")
+    ensure_line(
+        bashrc,
+        'if [ -r /usr/share/bash-completion/bash_completion ]; then . /usr/share/bash-completion/bash_completion; fi',
+    )
     ensure_line(bashrc, 'command -v mise >/dev/null 2>&1 && eval "$(mise activate bash)"')
     ensure_line(bashrc, 'command -v atuin >/dev/null 2>&1 && eval "$(atuin init bash)"')
     ensure_line(bashrc, 'command -v starship >/dev/null 2>&1 && eval "$(starship init bash)"')
@@ -1523,7 +1674,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         configure_guest_agent(ctx, services)
         install_engine_packages(ctx, package_manager)
         install_runtime(ctx, package_manager)
-        install_user_packages(ctx, package_manager)
+        user_packages = install_user_packages(ctx, package_manager)
+        configure_completions(ctx, package_manager, user_packages)
 
         if ctx.engine == "docker":
             configure_docker(ctx, services)

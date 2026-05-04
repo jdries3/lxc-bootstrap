@@ -20,7 +20,8 @@ adding Debian support and runtime selection.
 - Supports `runc`, `crun`, and `youki`.
 - Defaults to `crun` when no runtime was previously selected.
 - Uses distro packages for system components where possible.
-- Uses `mise` for the common CLI toolchain across both distributions.
+- Uses Alpine packages for the modern CLI stack on Alpine when available.
+- Uses `mise` for the modern CLI stack on Debian.
 - Fetches `youki` from GitHub releases only when you select `youki`.
 - Preserves engine and runtime choices in `/etc/lxc-bootstrap/state.toml`.
 
@@ -83,10 +84,11 @@ The bootstrap installs these through the distro package manager when possible.
 - foundational packages such as `ca-certificates`, shell support, and engine-
   adjacent dependencies
 
-### Mise-managed components
+### User-facing CLI components
 
-The bootstrap installs the common CLI stack through `mise` so Alpine and Debian
-share the same user-space toolchain.
+The bootstrap installs user-facing CLI tools from Alpine packages on Alpine when
+those packages exist. On Debian, it uses `mise` for the modern CLI stack and
+uses distro packages for foundational tools such as `curl`, `git`, and `wget`.
 
 - `atuin`
 - `bat`
@@ -114,6 +116,15 @@ fetches it from GitHub releases when you explicitly select `--runtime youki`.
 It uses the GitHub releases API to select the matching archive for the current
 architecture and libc family, and it verifies the release digest before
 installing `/usr/local/bin/youki`.
+
+## Shell completions
+
+The bootstrap enables Bash and Fish completions on a best-effort basis.
+
+- Alpine installs repo-provided completion packages when they exist.
+- `mise` completion scripts are generated explicitly when `mise` is installed.
+- Built-in completion generators are also used for selected tools such as
+  `atuin`, `starship`, and `yq` when available.
 
 ## Runtime behavior
 

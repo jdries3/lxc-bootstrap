@@ -188,6 +188,39 @@ class PackageManager:
         )
         return result.returncode == 0 and bool(result.stdout.strip())
 
+    def get_apk_package_tag(self, package: str) -> str | None:
+        if self.os_type != "alpine":
+            return None
+        result = subprocess.run(
+            ["apk", "policy", package],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+
+        current_repo = None
+        available_in_standard = False
+        available_in_testing = False
+
+        for line in result.stdout.splitlines():
+            line_stripped = line.strip()
+            if line.startswith("  ") and not line.startswith("    ") and line_stripped.endswith(":"):
+                current_repo = line_stripped[:-1]
+            elif line.startswith("    available:"):
+                if current_repo:
+                    if current_repo.startswith("@"):
+                        if current_repo == "@testing":
+                            available_in_testing = True
+                    else:
+                        available_in_standard = True
+
+        if not available_in_standard and available_in_testing:
+            return "@testing"
+        return None
+
+
 
 class ServiceManager:
     def __init__(self, console: Console, os_type: str):
@@ -790,6 +823,10 @@ def resolve_packages(
             None,
         )
         if selected:
+            if package_manager.os_type == "alpine":
+                tag = package_manager.get_apk_package_tag(selected)
+                if tag:
+                    selected = f"{selected}{tag}"
             resolved.append(selected)
             continue
         if package_spec.required:

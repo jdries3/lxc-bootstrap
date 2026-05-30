@@ -219,6 +219,43 @@ class PackageManagerTests(unittest.TestCase):
         pm = MODULE.PackageManager(console=None, os_type="alpine")
         self.assertFalse(pm.package_exists("nonexistent"))
 
+    @mock.patch("subprocess.run")
+    def test_get_apk_package_tag_standard_repo(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "policy", "openssh"],
+            returncode=0,
+            stdout="openssh policy:\n  v3.18:\n    installed: 9.3_p1-r0\n    available: 9.3_p2-r0\n  v3.17:\n    available: 9.1_p1-r0\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertIsNone(pm.get_apk_package_tag("openssh"))
+
+    @mock.patch("subprocess.run")
+    def test_get_apk_package_tag_testing_only(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "policy", "trippy"],
+            returncode=0,
+            stdout="trippy policy:\n  @testing:\n    available: 0.13.0-r0\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertEqual(pm.get_apk_package_tag("trippy"), "@testing")
+
+    @mock.patch("subprocess.run")
+    def test_get_apk_package_tag_both(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "policy", "somepackage"],
+            returncode=0,
+            stdout="somepackage policy:\n  v3.23:\n    available: 1.0.0-r0\n  @testing:\n    available: 1.1.0-r0\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertIsNone(pm.get_apk_package_tag("somepackage"))
+
+
 
 if __name__ == "__main__":
     unittest.main()

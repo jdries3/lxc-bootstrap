@@ -197,8 +197,6 @@ class PackageManager:
             text=True,
             check=False,
         )
-        if result.returncode != 0:
-            return None
 
         available_in_standard = False
         available_in_testing = False

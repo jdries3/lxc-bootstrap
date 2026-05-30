@@ -225,7 +225,7 @@ class PackageManagerTests(unittest.TestCase):
         mock_run.return_value = CompletedProcess(
             args=["apk", "policy", "openssh"],
             returncode=0,
-            stdout="openssh policy:\n  v3.18:\n    installed: 9.3_p1-r0\n    available: 9.3_p2-r0\n  v3.17:\n    available: 9.1_p1-r0\n",
+            stdout="openssh policy:\n  9.3_p1-r0: lib/apk/db/installed\n  9.3_p2-r0: https://dl-cdn.alpinelinux.org/alpine/v3.23/main\n  9.1_p1-r0: https://dl-cdn.alpinelinux.org/alpine/v3.22/main\n",
             stderr="",
         )
         pm = MODULE.PackageManager(console=None, os_type="alpine")
@@ -237,7 +237,7 @@ class PackageManagerTests(unittest.TestCase):
         mock_run.return_value = CompletedProcess(
             args=["apk", "policy", "trippy"],
             returncode=0,
-            stdout="trippy policy:\n  @testing:\n    available: 0.13.0-r0\n",
+            stdout="trippy policy:\n  0.13.0-r0: @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing\n",
             stderr="",
         )
         pm = MODULE.PackageManager(console=None, os_type="alpine")
@@ -249,7 +249,7 @@ class PackageManagerTests(unittest.TestCase):
         mock_run.return_value = CompletedProcess(
             args=["apk", "policy", "somepackage"],
             returncode=0,
-            stdout="somepackage policy:\n  v3.23:\n    available: 1.0.0-r0\n  @testing:\n    available: 1.1.0-r0\n",
+            stdout="somepackage policy:\n  1.0.0-r0: https://dl-cdn.alpinelinux.org/alpine/v3.23/community\n  1.1.0-r0: @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing\n",
             stderr="",
         )
         pm = MODULE.PackageManager(console=None, os_type="alpine")

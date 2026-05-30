@@ -200,26 +200,30 @@ class PackageManager:
         if result.returncode != 0:
             return None
 
-        current_repo = None
         available_in_standard = False
         available_in_testing = False
 
         for line in result.stdout.splitlines():
-            line_stripped = line.strip()
-            if line.startswith("  ") and not line.startswith("    ") and line_stripped.endswith(":"):
-                current_repo = line_stripped[:-1]
-            elif line.startswith("    available:"):
-                if current_repo:
-                    if current_repo.startswith("@"):
-                        if current_repo == "@testing":
-                            available_in_testing = True
-                    else:
-                        available_in_standard = True
+            if not line.startswith("  "):
+                continue
+            if ":" not in line:
+                continue
+            _, right = line.split(":", 1)
+            tokens = right.split()
+
+            has_testing = "@testing" in tokens
+            has_repo_url = any(t.startswith("http://") or t.startswith("https://") for t in tokens)
+            has_any_tag = any(t.startswith("@") for t in tokens)
+
+            if has_repo_url:
+                if has_testing:
+                    available_in_testing = True
+                elif not has_any_tag:
+                    available_in_standard = True
 
         if not available_in_standard and available_in_testing:
             return "@testing"
         return None
-
 
 
 class ServiceManager:

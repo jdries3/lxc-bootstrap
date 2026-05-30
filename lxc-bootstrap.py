@@ -168,12 +168,17 @@ class PackageManager:
     def package_exists(self, package: str) -> bool:
         if self.os_type == "alpine":
             result = subprocess.run(
-                ["apk", "search", "-x", package],
+                ["apk", "search", "-q", "-x", package],
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            return any(line.strip() == package for line in result.stdout.splitlines())
+            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if any(line == package for line in lines):
+                return True
+            pattern = re.compile(r"^" + re.escape(package) + r"-\d")
+            return any(pattern.match(line) for line in lines)
+
 
         result = subprocess.run(
             ["apt-cache", "show", package],

@@ -4,6 +4,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -175,5 +176,50 @@ class ConfigHelperTests(unittest.TestCase):
         )
 
 
+class PackageManagerTests(unittest.TestCase):
+    @mock.patch("subprocess.run")
+    def test_package_exists_alpine_exact_match(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "search", "-q", "-x", "bash"],
+            returncode=0,
+            stdout="bash\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertTrue(pm.package_exists("bash"))
+        mock_run.assert_called_with(
+            ["apk", "search", "-q", "-x", "bash"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @mock.patch("subprocess.run")
+    def test_package_exists_alpine_version_suffix(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "search", "-q", "-x", "bash"],
+            returncode=0,
+            stdout="bash-5.2.21-r0\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertTrue(pm.package_exists("bash"))
+
+    @mock.patch("subprocess.run")
+    def test_package_exists_alpine_no_match(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "search", "-q", "-x", "nonexistent"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertFalse(pm.package_exists("nonexistent"))
+
+
 if __name__ == "__main__":
     unittest.main()
+

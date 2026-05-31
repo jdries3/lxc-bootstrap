@@ -105,6 +105,7 @@ available. On Debian, it installs these tools using `mise`.
 - `fd`
 - `fzf`
 - `git`
+- `herdr`
 - `jq`
 - `lazydocker`
 - `nushell`

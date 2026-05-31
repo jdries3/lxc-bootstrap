@@ -123,6 +123,7 @@ class UserPackageCatalogParityTests(unittest.TestCase):
             "fd",
             "fzf",
             "git",
+            "herdr",
             "jq",
             "lazydocker",
             "nushell",

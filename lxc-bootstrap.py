@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.8"
+PROJECT_VERSION = "0.1.9"
 DEBUG_ENABLED = False
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
@@ -59,6 +59,7 @@ USER_PACKAGES = [
     {"p": "fd", "src": "deb:mise:aqua:sharkdp/fd"},
     {"p": "fzf", "src": "deb:mise:aqua:junegunn/fzf"},
     {"p": "git", "req": False},
+    {"p": "herdr", "src": "apk:,deb:mise:github:ogulcancelik/herdr"},
     {"p": "jq", "src": "deb:mise:aqua:jqlang/jq"},
     {"p": "lazydocker", "src": "deb:mise:aqua:jesseduffield/lazydocker"},
     {"p": "nushell", "src": "deb:mise:aqua:nushell/nushell"},

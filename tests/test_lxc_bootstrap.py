@@ -269,6 +269,19 @@ class PackageManagerTests(unittest.TestCase):
         pm = MODULE.PackageManager(console=None, os_type="alpine")
         self.assertIsNone(pm.get_apk_package_tag("nonexistent"))
 
+    @mock.patch("subprocess.run")
+    def test_get_apk_package_tag_odd_formatting(self, mock_run: mock.MagicMock) -> None:
+        from subprocess import CompletedProcess
+        # Test odd formatting with tabs, extra spacing, and no indentation
+        mock_run.return_value = CompletedProcess(
+            args=["apk", "policy", "trippy"],
+            returncode=1,
+            stdout="trippy policy:\n\t0.13.0-r0:\n\t\t@testing\thttps://dl-cdn.alpinelinux.org/alpine/edge/testing\n",
+            stderr="",
+        )
+        pm = MODULE.PackageManager(console=None, os_type="alpine")
+        self.assertEqual(pm.get_apk_package_tag("trippy"), "@testing")
+
 
 
 if __name__ == "__main__":

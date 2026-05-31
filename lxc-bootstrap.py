@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.4"
+PROJECT_VERSION = "0.1.5"
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
 GITHUB_USER = os.environ.get("LXC_BOOTSTRAP_GITHUB_USER", "jdries3")
@@ -205,13 +205,18 @@ class PackageManager:
 
         for line in result.stdout.splitlines():
             line_stripped = line.strip()
-            tokens = []
+            if not line_stripped:
+                continue
+            if line_stripped.endswith("policy:"):
+                continue
+            if line_stripped.endswith(":"):
+                continue
 
-            if line.startswith("    "):
-                tokens = line_stripped.split()
-            elif line.startswith("  ") and not line.startswith("   ") and ":" in line:
-                _, right = line.split(":", 1)
+            if ": " in line_stripped:
+                _, right = line_stripped.split(":", 1)
                 tokens = right.split()
+            else:
+                tokens = line_stripped.split()
 
             if not tokens:
                 continue

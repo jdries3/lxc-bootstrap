@@ -120,6 +120,7 @@ class UserPackageCatalogParityTests(unittest.TestCase):
             "dust",
             "eza",
             "fastfetch",
+            "fd",
             "fzf",
             "git",
             "jq",

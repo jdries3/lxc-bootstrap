@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.7"
+PROJECT_VERSION = "0.1.8"
 DEBUG_ENABLED = False
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
@@ -56,6 +56,7 @@ USER_PACKAGES = [
     {"p": "dust", "src": "deb:mise:aqua:bootandy/dust"},
     {"p": "eza", "src": "deb:mise:aqua:eza-community/eza"},
     {"p": "fastfetch", "src": "deb:mise:aqua:fastfetch-cli/fastfetch"},
+    {"p": "fd", "src": "deb:mise:aqua:sharkdp/fd"},
     {"p": "fzf", "src": "deb:mise:aqua:junegunn/fzf"},
     {"p": "git", "req": False},
     {"p": "jq", "src": "deb:mise:aqua:jqlang/jq"},

@@ -102,6 +102,7 @@ available. On Debian, it installs these tools using `mise`.
 - `dust`
 - `eza`
 - `fastfetch`
+- `fd`
 - `fzf`
 - `git`
 - `jq`

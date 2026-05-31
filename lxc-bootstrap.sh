@@ -47,11 +47,12 @@ install_alias() {
   mkdir -p "${PROFILE_D_DIR}"
   cat >"${ALIAS_SH}" <<EOF
 # Re-run lxc-bootstrap from GitHub using uv.
-alias lxc-bootstrap='${UV_BIN} run ${PROJECT_URL}'
+alias lxc-bootstrap='${UV_BIN} run --refresh ${PROJECT_URL}'
 EOF
   chmod 644 "${ALIAS_SH}"
 }
 
 install_uv
 install_alias
-exec "${UV_BIN}" run "${PROJECT_URL}" "$@"
+exec "${UV_BIN}" run --refresh "${PROJECT_URL}" "$@"
+

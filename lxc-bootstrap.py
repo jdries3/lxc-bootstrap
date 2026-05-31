@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.0"
+PROJECT_VERSION = "0.1.2"
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
 GITHUB_USER = os.environ.get("LXC_BOOTSTRAP_GITHUB_USER", "jdries3")
@@ -1620,6 +1620,7 @@ def configure_guest_agent(ctx: Context, services: ServiceManager) -> None:
 
 
 def summarize_configuration(ctx: Context) -> None:
+    info(ctx.console, f"Bootstrap version: {PROJECT_VERSION}")
     info(ctx.console, f"Container engine: {ctx.engine}")
     info(ctx.console, f"OCI runtime: {ctx.runtime}")
     info(ctx.console, f"Runtime environment: {ctx.environment}")

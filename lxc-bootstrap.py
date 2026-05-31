@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.6"
+PROJECT_VERSION = "0.1.7"
 DEBUG_ENABLED = False
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
@@ -849,7 +849,7 @@ def engine_package_specs(ctx: Context) -> list[PackageSpec]:
         return [
             spec("containerd", required=False),
             spec("docker.io"),
-            spec("docker-compose-v2", "docker-compose-plugin", required=False),
+            spec("docker-compose-v2", "docker-compose-plugin", "docker-compose", required=False),
         ]
 
     if ctx.os_type == "alpine":

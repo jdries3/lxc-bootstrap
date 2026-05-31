@@ -175,6 +175,17 @@ class ConfigHelperTests(unittest.TestCase):
             "overlay+fuse-overlayfs",
         )
 
+class EnginePackageSpecsTests(unittest.TestCase):
+    def test_debian_docker_specs_includes_docker_compose_candidates(self) -> None:
+        ctx = mock.MagicMock()
+        ctx.engine = "docker"
+        ctx.os_type = "debian"
+        specs = MODULE.engine_package_specs(ctx)
+        
+        candidates = [spec.candidates for spec in specs]
+        self.assertIn(("docker.io",), candidates)
+        self.assertIn(("docker-compose-v2", "docker-compose-plugin", "docker-compose"), candidates)
+
 
 class PackageManagerTests(unittest.TestCase):
     @mock.patch("subprocess.run")

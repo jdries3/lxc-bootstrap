@@ -235,10 +235,11 @@ class PackageManagerTests(unittest.TestCase):
     def test_get_apk_package_tag_testing_only(self, mock_run: mock.MagicMock) -> None:
         from subprocess import CompletedProcess
         # Simulate uninstalled package returning non-zero returncode from apk policy
+        # and using the multi-line wrapped output format
         mock_run.return_value = CompletedProcess(
             args=["apk", "policy", "trippy"],
             returncode=1,
-            stdout="trippy policy:\n  0.13.0-r0: @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing\n",
+            stdout="trippy policy:\n  0.13.0-r0:\n    @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing\n",
             stderr="",
         )
         pm = MODULE.PackageManager(console=None, os_type="alpine")

@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.3"
+PROJECT_VERSION = "0.1.4"
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
 GITHUB_USER = os.environ.get("LXC_BOOTSTRAP_GITHUB_USER", "jdries3")
@@ -204,12 +204,17 @@ class PackageManager:
         available_in_testing = False
 
         for line in result.stdout.splitlines():
-            if not line.startswith("  "):
+            line_stripped = line.strip()
+            tokens = []
+
+            if line.startswith("    "):
+                tokens = line_stripped.split()
+            elif line.startswith("  ") and not line.startswith("   ") and ":" in line:
+                _, right = line.split(":", 1)
+                tokens = right.split()
+
+            if not tokens:
                 continue
-            if ":" not in line:
-                continue
-            _, right = line.split(":", 1)
-            tokens = right.split()
 
             if "@testing" in tokens:
                 available_in_testing = True

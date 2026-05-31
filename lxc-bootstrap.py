@@ -30,7 +30,8 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.5"
+PROJECT_VERSION = "0.1.6"
+DEBUG_ENABLED = False
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
 GITHUB_USER = os.environ.get("LXC_BOOTSTRAP_GITHUB_USER", "jdries3")
@@ -111,6 +112,7 @@ class Options:
     install_bash: bool
     install_fish: bool
     no_color: bool
+    debug: bool
 
 
 @dataclass
@@ -137,9 +139,10 @@ class UserPackage:
 
 
 class PackageManager:
-    def __init__(self, console: Console, os_type: str):
+    def __init__(self, console: Console, os_type: str, debug: bool = False):
         self.console = console
         self.os_type = os_type
+        self.debug_enabled = debug
 
     def update(self) -> None:
         if self.os_type == "alpine":
@@ -197,8 +200,7 @@ class PackageManager:
             text=True,
             check=False,
         )
-        if package == "trippy" and self.console:
-            info(self.console, f"DEBUG: apk policy trippy output:\n{result.stdout}")
+        debug(self.console, f"apk policy {package} output:\n{result.stdout}")
 
         available_in_standard = False
         available_in_testing = False
@@ -231,11 +233,9 @@ class PackageManager:
                 available_in_standard = True
 
         if not available_in_standard and available_in_testing:
-            if package == "trippy" and self.console:
-                info(self.console, "DEBUG: trippy resolved to @testing")
+            debug(self.console, f"{package} resolved to @testing")
             return "@testing"
-        if package == "trippy" and self.console:
-            info(self.console, f"DEBUG: trippy resolution: available_in_standard={available_in_standard}, available_in_testing={available_in_testing}")
+        debug(self.console, f"{package} resolution: available_in_standard={available_in_standard}, available_in_testing={available_in_testing}")
         return None
 
 
@@ -363,6 +363,11 @@ def fail(console: Console, message: str) -> None:
     console.print(f"[red][{PROJECT_NAME}] ERROR:[/red] {message}")
 
 
+def debug(console: Console, message: str) -> None:
+    if DEBUG_ENABLED and console:
+        console.print(f"[grey50][{PROJECT_NAME}] DEBUG:[/grey50] {message}")
+
+
 def run_command(
     console: Console,
     command: Sequence[str],
@@ -370,8 +375,11 @@ def run_command(
     env: dict[str, str] | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    if env:
+        debug(console, f"Environment overrides: {env}")
     info(console, f"Running: {' '.join(command)}")
     result = subprocess.run(command, text=True, capture_output=True, env=env, check=False)
+    debug(console, f"Command exit code: {result.returncode}")
     if result.stdout.strip():
         console.print(result.stdout.rstrip())
     if result.returncode != 0 and result.stderr.strip():
@@ -389,16 +397,25 @@ def backup_once(path: Path) -> None:
         shutil.copy2(path, backup)
 
 
-def load_state() -> dict[str, Any]:
+def load_state(console: Console | None = None) -> dict[str, Any]:
     if not STATE_FILE.exists():
+        if console:
+            debug(console, f"State file {STATE_FILE} does not exist")
         return {}
     try:
-        return tomlkit.parse(STATE_FILE.read_text()).unwrap()
-    except Exception:
+        content = STATE_FILE.read_text()
+        state = tomlkit.parse(content).unwrap()
+        if console:
+            debug(console, f"Loaded state from {STATE_FILE}: {state}")
+        return state
+    except Exception as e:
+        if console:
+            debug(console, f"Failed to parse state file {STATE_FILE}: {e}")
         return {}
 
 
 def save_state(ctx: Context) -> None:
+    debug(ctx.console, f"Saving state to {STATE_FILE}...")
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     doc = tomlkit.document()
     doc["bootstrap_engine"] = ctx.engine
@@ -413,6 +430,7 @@ def save_state(ctx: Context) -> None:
     ).stdout.strip()
     STATE_FILE.write_text(tomlkit.dumps(doc))
     STATE_FILE.chmod(0o644)
+    debug(ctx.console, "State saved successfully")
 
 
 def choose_saved_or_override(
@@ -435,17 +453,25 @@ def choose_saved_or_override(
     return default
 
 
-def detect_os() -> str:
+def detect_os(console: Console | None = None) -> str:
+    if console:
+        debug(console, "Detecting OS...")
     if Path("/etc/alpine-release").exists():
+        if console:
+            debug(console, f"Found /etc/alpine-release: {Path('/etc/alpine-release').read_text().strip()}")
         return "alpine"
     if Path("/etc/debian_version").exists():
+        if console:
+            debug(console, f"Found /etc/debian_version: {Path('/etc/debian_version').read_text().strip()}")
         return "debian"
     raise BootstrapError("Unsupported OS. Expected Alpine or Debian.")
 
 
 def detect_environment(console: Console) -> str:
+    debug(console, "Detecting guest environment...")
     try:
         systemd_container = Path("/run/systemd/container").read_text().strip()
+        debug(console, f"Checked /run/systemd/container: {systemd_container}")
         if systemd_container in {"lxc", "lxc-libvirt"}:
             return "lxc"
     except FileNotFoundError:
@@ -453,6 +479,8 @@ def detect_environment(console: Console) -> str:
 
     try:
         environ = Path("/proc/1/environ").read_bytes().split(b"\0")
+        container_entry = [e.decode("utf-8", errors="replace") for e in environ if e.startswith(b"container=")]
+        debug(console, f"Checked /proc/1/environ container entry: {container_entry}")
         if b"container=lxc" in environ or b"container=lxc-libvirt" in environ:
             return "lxc"
     except (FileNotFoundError, PermissionError):
@@ -460,13 +488,16 @@ def detect_environment(console: Console) -> str:
 
     try:
         mountinfo = Path("/proc/1/mountinfo").read_text()
-        if "lxcfs" in mountinfo or "/dev/.lxc/" in mountinfo:
+        lxcfs_present = "lxcfs" in mountinfo or "/dev/.lxc/" in mountinfo
+        debug(console, f"Checked /proc/1/mountinfo for lxcfs/lxc: {lxcfs_present}")
+        if lxcfs_present:
             return "lxc"
     except (FileNotFoundError, PermissionError):
         pass
 
     try:
         product_name = Path("/sys/class/dmi/id/product_name").read_text().strip()
+        debug(console, f"Checked DMI product_name: {product_name}")
         for marker in ("KVM", "QEMU", "VirtualBox", "VMware", "Virtual Machine", "Bochs", "Q35"):
             if marker in product_name:
                 return "vm"
@@ -474,7 +505,10 @@ def detect_environment(console: Console) -> str:
         pass
 
     try:
-        if "hypervisor" in Path("/proc/cpuinfo").read_text():
+        cpuinfo = Path("/proc/cpuinfo").read_text()
+        has_hypervisor = "hypervisor" in cpuinfo
+        debug(console, f"Checked /proc/cpuinfo for hypervisor flag: {has_hypervisor}")
+        if has_hypervisor:
             return "vm"
     except (FileNotFoundError, PermissionError):
         pass
@@ -484,18 +518,26 @@ def detect_environment(console: Console) -> str:
 
 
 def detect_container_privilege_mode(console: Console) -> str:
+    debug(console, "Detecting container privilege mode...")
     try:
-        lines = Path("/proc/self/uid_map").read_text().splitlines()
-    except (FileNotFoundError, PermissionError):
+        uid_map = Path("/proc/self/uid_map").read_text().strip()
+        debug(console, f"Checked /proc/self/uid_map:\n{uid_map}")
+        lines = uid_map.splitlines()
+    except (FileNotFoundError, PermissionError) as e:
+        debug(console, f"Failed to read /proc/self/uid_map: {e}")
         warn(console, "Could not determine UID mapping; defaulting to unprivileged-safe settings")
         return "unknown"
 
     if not lines:
+        debug(console, "uid_map has no lines")
         return "unknown"
     parts = lines[0].split()
     if len(parts) < 2 or parts[0] != "0":
+        debug(console, f"First line of uid_map does not split to expected format: {parts}")
         return "unknown"
-    return "privileged" if parts[1] == "0" else "unprivileged"
+    mode = "privileged" if parts[1] == "0" else "unprivileged"
+    debug(console, f"Determined mode from parts: {mode}")
+    return mode
 
 
 def storage_backend_label_for_mode(engine: str, mode: str) -> str:
@@ -1664,6 +1706,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Options:
     parser.add_argument("--install-fish", dest="install_fish", action="store_true", default=True)
     parser.add_argument("--no-fish", dest="install_fish", action="store_false")
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args(argv)
     return Options(
         engine=args.engine,
@@ -1677,12 +1720,13 @@ def parse_args(argv: Sequence[str] | None = None) -> Options:
         install_bash=args.install_bash,
         install_fish=args.install_fish,
         no_color=args.no_color,
+        debug=args.debug,
     )
 
 
 def build_context(options: Options, console: Console) -> Context:
-    os_type = detect_os()
-    state = load_state()
+    os_type = detect_os(console)
+    state = load_state(console)
     environment = detect_environment(console)
     privilege_mode = detect_container_privilege_mode(console)
     engine = choose_saved_or_override(
@@ -1719,13 +1763,15 @@ def require_root() -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     options = parse_args(argv)
+    global DEBUG_ENABLED
+    DEBUG_ENABLED = options.debug
     console = Console(no_color=options.no_color or bool(os.environ.get("NO_COLOR")))
     try:
         require_root()
         ctx = build_context(options, console)
         summarize_configuration(ctx)
         guard_storage_backend_transition(ctx)
-        package_manager = PackageManager(console, ctx.os_type)
+        package_manager = PackageManager(console, ctx.os_type, debug=ctx.options.debug)
         services = ServiceManager(console, ctx.os_type)
 
         configure_repositories(ctx)

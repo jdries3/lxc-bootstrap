@@ -30,7 +30,7 @@ import tomlkit
 from rich.console import Console
 
 PROJECT_NAME = "lxc-bootstrap"
-PROJECT_VERSION = "0.1.2"
+PROJECT_VERSION = "0.1.3"
 STATE_DIR = Path("/etc/lxc-bootstrap")
 STATE_FILE = STATE_DIR / "state.toml"
 GITHUB_USER = os.environ.get("LXC_BOOTSTRAP_GITHUB_USER", "jdries3")
@@ -197,6 +197,8 @@ class PackageManager:
             text=True,
             check=False,
         )
+        if package == "trippy" and self.console:
+            info(self.console, f"DEBUG: apk policy trippy output:\n{result.stdout}")
 
         available_in_standard = False
         available_in_testing = False
@@ -209,18 +211,21 @@ class PackageManager:
             _, right = line.split(":", 1)
             tokens = right.split()
 
-            has_testing = "@testing" in tokens
+            if "@testing" in tokens:
+                available_in_testing = True
+
             has_repo_url = any(t.startswith("http://") or t.startswith("https://") for t in tokens)
             has_any_tag = any(t.startswith("@") for t in tokens)
 
-            if has_repo_url:
-                if has_testing:
-                    available_in_testing = True
-                elif not has_any_tag:
-                    available_in_standard = True
+            if has_repo_url and not has_any_tag:
+                available_in_standard = True
 
         if not available_in_standard and available_in_testing:
+            if package == "trippy" and self.console:
+                info(self.console, "DEBUG: trippy resolved to @testing")
             return "@testing"
+        if package == "trippy" and self.console:
+            info(self.console, f"DEBUG: trippy resolution: available_in_standard={available_in_standard}, available_in_testing={available_in_testing}")
         return None
 
 
